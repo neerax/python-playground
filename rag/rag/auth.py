@@ -42,6 +42,5 @@ def get_oauth_session() -> OAuth2Session:
     
     session.fetch_token(grant_type="client_credentials")
 
-    
     return session
 

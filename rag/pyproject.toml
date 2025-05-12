@@ -11,6 +11,9 @@ requests = "^2.32.3"
 dotenv = "^0.9.9"
 authlib = "^1.5.2"
 langchain = "^0.3.25"
+graphql-query = "^1.4.0"
+typer = "^0.15.3"
+click = "8.1.7"
 
 
 [build-system]
