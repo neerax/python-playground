@@ -20,6 +20,8 @@ from requests.exceptions import HTTPError
 from typing_extensions import Annotated
 from typer import Typer, Context, Option, Argument, echo, secho, colors
 
+from chatbot import run_chat
+
 load_dotenv()
 
 app = Typer()
@@ -130,10 +132,33 @@ def delete_chunks_by_source(ctx: Context, source: str):
     echo(toJson(resp))
 
 @app.command()
-def query(ctx: Context, text: str, k: Annotated[int, Argument(...)]):
-    resp = ctx.obj.weaviate_client.query(text, k)
+def query(
+    ctx: Context,
+    text: Annotated[str, Argument(..., help="The query text")],
+    k: Annotated[int, Option("--k", "-k", help="Number of top results", show_default=True)] = 3,
+    neighbors: Annotated[int, Option("--neighbors", "-n", help="Number of neighbor chunks to include", show_default=True)] = 1
+):
+    resp = ctx.obj.weaviate_client.query(text, k, neighbors)
     echo(toJson(resp))
     
+
+@app.command()
+def chat(
+    ctx: Context,
+    groq_api_key: Annotated[str, Option("--groq-api-key", "-g",help="API Key per Groq Chat",envvar="GROQ_API_KEY")],
+    k: Annotated[int, Option("--k", "-k", help="Top-k chunks", show_default=True)] = 3,
+    neighbors: Annotated[int, Option("--neighbors", "-n", help="Vicini da includere", show_default=True)] = 1
+):
+    """
+    Avvia la chat RAG interattiva usando GroqChat + Weaviate.
+    """
+    client = ctx.obj.weaviate_client
+    run_chat(
+        client=client,
+        groq_api_key=groq_api_key,
+        k=k,
+        neighbors=neighbors
+    )
 
 @app.callback()
 def main(
@@ -143,9 +168,6 @@ def main(
 ):
     ctx.obj = SimpleNamespace()
     ctx.obj.weaviate_client = WeaviateClient(weaviate_url, weaviate_api_key)
-
-    
-    
 
     
     #file_path = "/home/niko/Scaricati/PSN_UserGuide_IaaS_Industry_Standardv3.0.3.pdf"

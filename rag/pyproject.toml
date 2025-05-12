@@ -14,6 +14,7 @@ langchain = "^0.3.25"
 graphql-query = "^1.4.0"
 typer = "^0.15.3"
 click = "8.1.7"
+langchain-groq = "^0.3.2"
 
 
 [build-system]

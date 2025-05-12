@@ -4,6 +4,12 @@ from functools import lru_cache
 from dotenv import load_dotenv
 from graphql_query import Operation, Query, Field, Argument, Variable
 from langchain.text_splitter import RecursiveCharacterTextSplitter
+import json
+from langchain.schema import Document
+from typing import List
+from langchain.schema.retriever import BaseRetriever
+
+
 
 @lru_cache(maxsize=1)
 def get_splitter(chunk_size=500, chunk_overlap=100):
@@ -163,68 +169,83 @@ class WeaviateClient:
                     fields=[document_chunk_field]
                 )
             ]
-        )
+            )
 
         return op.render()
 
+    def query(self, text: str, k: int = 1, neighbors: int = 1):
+        # ——— Prima query: nearText / nearVector
+        initial_gql = self.create_query_with_neighbors(text, k, neighbors)
+        initial_resp = self.api_post("graphql", {"query": initial_gql})
+        hits = initial_resp.get("data", {}).get("Get", {}).get("DocumentChunk", [])
+        if not hits:
+            return ""
 
-    def query(self, query: str, k: int = 1):
+        # Debug 1: chunk_id principali trovati
+        main_ids = [h["chunk_id"] for h in hits]
+        print("[DEBUG] Chunk IDs trovati:", main_ids)
 
-        graphql = self.create_query_with_neighbors(query, k)
+        # ——— Calcolo IDs estesi (inclusi vicini)
+        extended_ids = {
+            n
+            for cid in main_ids
+            for n in range(cid - neighbors, cid + neighbors + 1)
+            if n >= 0
+        }
+        print("[DEBUG] Chunk IDs estesi:", sorted(extended_ids))
 
-        print(graphql)
+        # ——— Filtra solo i vicini che non erano in main_ids
+        neighbor_ids = sorted(extended_ids.difference(main_ids))
+        print("[DEBUG] Chunk IDs da recuperare (solo vicini):", neighbor_ids)
 
-        resp = self.api_post("graphql", {"query": graphql} )
+        neighbor_chunks = []
+        if neighbor_ids:
+            # costruiamo un singolo where con questi neighbor_ids
+            where_arg = Argument(
+                name="where",
+                value=[
+                    Argument(name="operator", value="Or"),
+                    Argument(
+                        name="operands",
+                        value=[
+                            [
+                                Argument(name="path", value=["chunk_id"]),
+                                Argument(name="operator", value="Equal"),
+                                Argument(name="valueInt", value=cid),
+                            ]
+                            for cid in neighbor_ids
+                        ]
+                    )
+                ]
+            )
 
-        return resp
+            doc_field = Field(
+                name="DocumentChunk",
+                arguments=[where_arg],
+                fields=["chunk_id", "text"]
+            )
+            op = Operation(type="query", queries=[Query(name="Get", fields=[doc_field])])
+            gql = op.render()
+            resp = self.api_post("graphql", {"query": gql})
+            neighbor_chunks = resp.get("data", {}).get("Get", {}).get("DocumentChunk", [])
 
+        # ——— Combiniamo risultati originali + vicini
+        all_chunks = hits + neighbor_chunks
 
-    def query_with_neighbors(query: str, k: int = 1, neighbors: int = 1, vector: list[float] | None = None):
+        # ——— Ordiniamo per chunk_id
+        sorted_chunks = sorted(all_chunks, key=lambda x: x["chunk_id"])
 
-        graphql = self.create_query_with_neighbors(query, k, neighbors)
-
-        print(graphql)
-
-        resp = requests.post(f"{WEAVIATE_URL}/v1/graphql", json={"query": graphql}, headers=HEADERS)
-        resp.raise_for_status()
-
-        data = resp.json()
-        return data
-
-        data = resp.json()["data"]["Get"]["DocumentChunk"]
-
-        # # 2) recupera vicini
-        # all_texts = []
-        # for item in data:
-        #     cid = item["chunk_id"]
-        #     for nid in range(cid - neighbors, cid + neighbors + 1):
-        #         if nid < 0:
-        #             continue
-        #         where = {
-        #             "path": ["chunk_id"],
-        #             "operator": "Equal",
-        #             "valueInt": nid
-        #         }
-        #         q = f"""
-        #         {{
-        #           Get {{
-        #             DocumentChunk(where: {where}) {{
-        #               text
-        #               chunk_id
-        #             }}
-        #           }}
-        #         }}
-        #         """
-        #         r2 = requests.post(f"{WEAVIATE_URL}/v1/graphql", json={"query": q}, headers=HEADERS)
-        #         r2.raise_for_status()
-        #         hits = r2.json()["data"]["Get"]["DocumentChunk"]
-        #         for h in hits:
-        #             all_texts.append(h["text"])
-        # return "\n\n---\n\n".join(all_texts)
+        # ——— Restituiamo testo concatenato
+        return "\n\n---\n\n".join(c["text"] for c in sorted_chunks)
 
 
-    
 
-    
+class WeaviateRetriever(BaseRetriever):
+    client: WeaviateClient
+    k: int = 3
+    neighbors: int = 1
 
-    
+    def _get_relevant_documents(self, query: str) -> List[Document]:
+        raw = self.client.query(query, self.k, self.neighbors)
+        parts = [p for p in raw.split("\n\n---\n\n") if p.strip()]
+        return [Document(page_content=p) for p in parts]
