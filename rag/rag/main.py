@@ -73,7 +73,13 @@ def create_schema(ctx: Context):
                     "text2vec-ollama": {
                         "model": "nomic-embed-text",
                         "apiEndpoint": "http://ollama:11434"
-                    }
+                    },
+                    "generative-openai": {
+                        "model": "meta-llama/llama-4-scout-17b-16e-instruct",
+                         "base_url": "https://api.groq.com/openai/v1",
+
+                    },
+                    "qna-openai": {},
                 },
                 "properties": [
                     {
@@ -95,9 +101,9 @@ def create_schema(ctx: Context):
         created = ctx.obj.weaviate_client.create_class(payload)
         echo(toJson(created))
     except HTTPError as e:
-        if (e.response.status_code == 422):
-            secho(f"cannot create error, api returns 422 status code, already exists?", err=True, fg=colors.RED)
-        else:
+        # if (e.response.status_code == 422):
+        #     secho(f"cannot create error, api returns 422 status code, already exists?", err=True, fg=colors.RED)
+        # else:
             raise
     
 @app.command()

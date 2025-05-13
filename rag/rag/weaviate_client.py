@@ -49,6 +49,12 @@ class WeaviateClient:
         resp.raise_for_status()
         return resp.json()
 
+    def api_put(self, name, body, additional="", version="v1"):
+        url = self.api_build_url(name, additional, version)
+        resp = requests.put(url, json=body, headers=self.headers)
+        resp.raise_for_status()
+        return resp.json()
+
     def api_delete(self, name, additional="", version="v1"):
         url = self.api_build_url(name, additional, version)
         resp = requests.delete(url, headers=self.headers)
@@ -237,6 +243,112 @@ class WeaviateClient:
 
         # ——— Restituiamo testo concatenato
         return "\n\n---\n\n".join(c["text"] for c in sorted_chunks)
+
+    def ask(self,
+            question: str,
+            properties: list[str] | None = None,
+            limit: int = 1,
+            certainty: float | None = None
+        ):
+        """
+        Esegue una query 'ask' su Weaviate utilizzando il modulo qna-openai.
+        Restituisce la risposta estratta con campo 'result'.
+        """
+        args = [
+            Argument(name="question", value=question)
+        ]
+        if properties:
+            args.append(Argument(name="properties", value=properties))
+        if certainty is not None:
+            args.append(Argument(name="certainty", value=certainty))
+
+        ask_arg = Argument(name="ask", value=args)
+        limit_arg = Argument(name="limit", value=limit)
+
+        ask_field = Field(
+            name="DocumentChunk",
+            arguments=[ask_arg, limit_arg],
+            fields=[
+                Field(
+                    name="_additional",
+                    fields=[
+                        Field(name="answer", fields=[
+                            "hasAnswer", "result", "certainty", "startPosition", "endPosition"
+                        ])
+                    ]
+                )
+            ]
+        )
+
+        op = Operation(
+            type="query",
+            queries=[Query(name="Get", fields=[ask_field])]
+        )
+        gql = op.render()
+        resp = self.api_post("graphql", {"query": gql})
+        return resp.get("data", {}).get("Get", {}).get("DocumentChunk", [])
+
+    def generate(self,
+                query: str,
+                prompt: str,
+                k: int = 1,
+                alpha: float | None = None
+        ):
+        """
+        Esegue una query 'generate' (RAG) su Weaviate utilizzando il modulo generative-openai.
+        - query: la stringa di ricerca (semantica/ibrida)
+        - prompt: template con placeholder {text} o altri campi
+        - k: numero di documenti da recuperare
+        - alpha: ponderazione per hybrid search (0-1)
+
+        Restituisce i testi generati per ogni risultato.
+        """
+        # filtro di retrieval (vettoriale/ibrido)
+        if alpha is not None:
+            filter_arg = Argument(
+                name="hybrid",
+                value=[
+                    Argument(name="query", value=query),
+                    Argument(name="alpha", value=alpha)
+                ]
+            )
+        else:
+            filter_arg = Argument(
+                name="nearText",
+                value=[Argument(name="concepts", value=[query])]
+            )
+        limit_arg = Argument(name="limit", value=k)
+
+        generate_args = [
+            Argument(
+                name="singleResult",
+                value=[Argument(name="prompt", value=prompt)]
+            )
+        ]
+        generate_field = Field(
+            name="generate",
+            arguments=generate_args,
+            fields=["singleResult", "error"]
+        )
+
+        rag_field = Field(
+            name="DocumentChunk",
+            arguments=[filter_arg, limit_arg],
+            fields=[
+                Field(name="chunk_id"),
+                Field(name="text"),
+                Field(name="_additional", fields=[generate_field])
+            ]
+        )
+
+        op = Operation(
+            type="query",
+            queries=[Query(name="Get", fields=[rag_field])]
+        )
+        gql = op.render()
+        resp = self.api_post("graphql", {"query": gql})
+        return resp.get("data", {}).get("Get", {}).get("DocumentChunk", [])
+
 
 
 
