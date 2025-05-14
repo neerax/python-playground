@@ -159,9 +159,9 @@ class WeaviateClient:
 
     def build_graphql_values_from_simple_condition(self, condition : Dict):
         return [
-                Argument( name = "operator", value = condition["operator"] ),
-                Argument( name = "name", value = condition["path"] ),
-                Argument( name = "valueString", value = condition["valueString"])
+                { "name": "operator", "value": condition["operator"] },
+                { "name": "name", "value" : condition["path"] },
+                { "name": "valueString", "value" : json.dumps(condition["valueString"])}
         ]
         return argument
 
@@ -199,7 +199,82 @@ class WeaviateClient:
         )
         return argument
 
+
+    def super_search(self, variables: Dict, properties: List, additional=List):
+
+        TYPE_MAP = {
+            "where": "GetObjectsDocumentWhereInpObj!",
+            "bm25": "GetObjectsDocumentHybridGetBm25InpObj!"
+        }
+
+        variable_objs = {
+            name: Variable(name=name, type=TYPE_MAP[name])
+            for name in variables.keys()
+            if name in TYPE_MAP
+        }
+
+        variable_definitions = list(variable_objs.values())
+
+        arguments = [
+            Argument(name=name, value=variable_objs[name])
+            for name in variable_objs
+        ]
+
+        fields = properties
+        if (additional):
+            additional_field = Field(name="_additional", fields=additional)
+            fields.append(additional_field)
+
+        query = Query(
+            name="Get",
+            fields=[
+                Field(
+                    name="Document",
+                    arguments=arguments,
+                    fields=fields
+                )
+            ]
+        )
+        operation = Operation(
+            queries=[query],
+            variables=variable_definitions
+        )
+
+        q = operation.render()
+
+        resp = self.api_post("graphql", {
+            "query": q,
+            "variables": variables
+        })
         
+        return resp
+
+    
+    # FUNZIONANTE
+    # def test(self):
+    #     nomefile = Variable(name="nomefile", type="TextStringGetObjectsDocument")
+    #     query = Query(name="Get", fields=[
+    #         Field(name = "Document", arguments=[
+    #             Argument(name="where", value=[
+    #                 { "name" : "operator", "value": "Equal"},
+    #                 { "name" : "path", "value": ["source"]},
+    #                 { "name" : "valueString", "value": nomefile}
+                    
+    #             ])
+    #         ], fields=["size"])
+    #     ])
+    #     operation = Operation(queries=[query], variables=[nomefile])
+        
+        
+    #     q = operation.render()
+
+    #     print(q)
+
+    #     resp = self.api_post("graphql", {"query": q, "variables": {
+    #         "nomefile":"/home/niko/Sviluppo/python-playground/rag/rag/documenti/PSN_UserGuide_IaaS_Industry_Standardv3.0.3.pdf"}
+    #     })
+
+    #     return resp
     def get_object_by_where_condition(self, class_name: str, condition: Dict):
         pass
         
@@ -330,8 +405,12 @@ class WeaviateClient:
 
 
     def general_query(self, class_name, text):
+
+        variables = Variable(name="testo", type="String")
+
         query = Operation(
             type="query",
+            variables = [variables],
             queries=[
                 Query(
                     name="Get",
@@ -343,23 +422,25 @@ class WeaviateClient:
                                 Field(name="_additional", fields=["certainty", "distance","score"])
                             ],
                             arguments=[
-                        Argument(
-                            name="bm25",
-                            value = Argument(
-                                name="query",
-                                value = json.dumps(text)
-                            )
-                        )
-                    ]
+                                Argument(
+                                    name="bm25",
+                                    value = Argument(
+                                        name="query",
+                                        value = variables
+                                    )
+                                )
+                            ]
                         )       
                     ]
                 )
-                ]).render()
+            ]
+        ).render()
 
         print("QUERY", query)
 
-        resp = self.api_post("graphql", {"query": query})["data"]["Get"][class_name]
+        resp = self.api_post("graphql", {"query": query, "variables": {"testo":text}})["data"]["Get"][class_name]
         return resp
+    
     def query(self, text: str, k: int = 1, neighbors: int = 1):
         # ——— Prima query: nearText / nearVector
         initial_gql = self.create_query_with_neighbors(text, k, neighbors)

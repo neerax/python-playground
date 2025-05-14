@@ -193,24 +193,26 @@ def chat(
 def test(
     ctx: Context
 ):
-    # d = {
-    #     "operator": "Equal",
-    #     "path": ["source"],
-    #     "valueString": "/home/niko/Scaricati/PSN_UserGuide_IaaS_Industry_Standardv3.0.3.pdf"
-    # }
 
-    d = {
-        "operator": "And",
-        "operands": [
-            {
+    #print (ctx.obj.app.get_weaviate_client().build_graphql_where_argument(d).render())
+    print (ctx.obj.app.get_weaviate_client().super_search({
+            "where": {
                 "operator": "Equal",
-                "path": ["chunk_id"],
-                "valueString": "blah"
+                "path": ["source"],
+                "valueString": "/home/niko/Sviluppo/python-playground/rag/rag/documenti/PSN_UserGuide_IaaS_Industry_Standardv3.0.3.pdf"
             }
-        ]
-    }
-
-    print (ctx.obj.app.get_weaviate_client().build_graphql_where_argument(d).render())
+        }, properties=["size", "source","m_time"],additional=["id"]))
+    
+    print (ctx.obj.app.get_weaviate_client().super_search({
+            "bm25": {
+                "query": "Cloud"
+            },
+            "where": {
+                "operator": "Equal",
+                "path": ["source"],
+                "valueString": "/home/niko/Sviluppo/python-playground/rag/rag/documenti/PSN_UserGuide_IaaS_Industry_Standardv3.0.3.pdf"
+            }
+        }, properties=["size", "source","m_time"],additional=["id","score"]))
     
 
 @app.callback()

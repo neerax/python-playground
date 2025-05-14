@@ -25,6 +25,12 @@
                 "dataType": [
                     "date"
                 ]
+            },
+            {
+                "name": "vectorized",
+                "dataType": [
+                    "boolean"
+                ]
             }
         ]
     },
