@@ -15,12 +15,11 @@ from utils import toJson
 
 from requests.exceptions import HTTPError
 
-
-
 from typing_extensions import Annotated
 from typer import Typer, Context, Option, Argument, echo, secho, colors
 
 from chatbot import run_chat
+from app import RagApp
 
 load_dotenv()
 
@@ -36,24 +35,6 @@ class PostgrestClient:
         return response
 
     
-def put_tika(path_to_file: str) -> str:
-
-    session = get_oauth_session()
-
-    tika_extract_endpoint = os.getenv("TIKA_EXTRACT_ENDPOINT")
-    if not tika_extract_endpoint:
-        raise EnvironmentError("TIKA_EXTRACT_ENDPOINT not found in environment variables.")
-
-    headers = {"Accept": "text/plain"}
-    try:
-        with open(path_to_file, 'rb') as f:
-            response = session.put(tika_extract_endpoint, data=f, headers=headers)
-            response.raise_for_status()
-            response.encoding = "utf-8"
-            return response.text
-    
-    except Exception as e:
-        raise
 
 # @app.command()
 # def ensure_schemas():
@@ -61,8 +42,23 @@ def put_tika(path_to_file: str) -> str:
 
 @app.command()
 def get_schema(ctx: Context):
-    schema = ctx.obj.weaviate_client.get_schema()
+    schema = ctx.obj.app.get_weaviate_client().get_schema()
     print(toJson(schema))
+
+@app.command()
+def apply_schema(ctx: Context, file_path: str):
+    print("opening", file_path)
+    with open(file_path, "r") as f:
+        definitions = json.load(f)
+        created, skipped, failed = ctx.obj.app.get_weaviate_client().apply_schema(definitions)
+
+    secho("Created:", fg=colors.GREEN)
+    secho(toJson(created))
+    secho("Skipped:", fg=colors.YELLOW)
+    secho(toJson(skipped))
+    secho("Failed:", fg=colors.RED)
+    secho(toJson(failed))
+
 
 @app.command()
 def create_schema(ctx: Context):
@@ -74,12 +70,12 @@ def create_schema(ctx: Context):
                         "model": "nomic-embed-text",
                         "apiEndpoint": "http://ollama:11434"
                     },
-                    "generative-openai": {
-                        "model": "meta-llama/llama-4-scout-17b-16e-instruct",
-                         "base_url": "https://api.groq.com/openai/v1",
+                    # "generative-openai": {
+                    #     "model": "meta-llama/llama-4-scout-17b-16e-instruct",
+                    #      "base_url": "https://api.groq.com/openai/v1",
 
-                    },
-                    "qna-openai": {},
+                    # },
+                    # "qna-openai": {},
                 },
                 "properties": [
                     {
@@ -93,6 +89,14 @@ def create_schema(ctx: Context):
                     {
                         "name": "source",
                         "dataType": ["string"]
+                    },
+                    {
+                        "name": "size",
+                        "dataType": ["int64"]
+                    },
+                    {
+                        "name": "m_time",
+                        "dataType": ["date"],
                     }
                 ]
             }
@@ -119,7 +123,12 @@ def get_class(ctx: Context, class_name: Annotated[str, Argument(...)]):
     
 @app.command()
 def delete_class(ctx: Context, class_name: Annotated[str, Argument(...)]):
-    ctx.obj.weaviate_client.delete_class(class_name)
+    ctx.obj.app.get_weaviate_client().delete_class(class_name)
+
+@app.command()
+def ingest(ctx: Context, file_path: str, recursive: Annotated[bool, Option("--recursive", "-r", help="Recursive scan", show_default=True)] = False):
+    ctx.obj.app.ingest_path(file_path, recursive)
+    
 
 @app.command()
 def ingest_file(ctx: Context, file_path: Annotated[str, Argument(...)]):
@@ -131,6 +140,14 @@ def ingest_file(ctx: Context, file_path: Annotated[str, Argument(...)]):
 def get_document_chunk(ctx: Context, source: str):
     resp = ctx.obj.weaviate_client.get_document_chunk(str)
     echo(toJson(resp))
+
+@app.command()
+def show_documents(ctx: Context):
+    documents = ctx.obj.app.get_documents()
+    for document in documents:
+        secho(document["_additional"]["id"])
+        secho(document["source"])
+#        print(document)
 
 @app.command()
 def delete_chunks_by_source(ctx: Context, source: str):
@@ -146,6 +163,12 @@ def query(
 ):
     resp = ctx.obj.weaviate_client.query(text, k, neighbors)
     echo(toJson(resp))
+
+@app.command()
+def general_query(ctx: Context, class_name: str, text: str):
+    result = ctx.obj.app.get_weaviate_client().general_query(class_name, text)
+    print("DOCUMENTI TROVATI", len(result))
+    echo(toJson(result))
     
 
 @app.command()
@@ -173,8 +196,7 @@ def main(
     weaviate_api_key: Annotated[str, Option(..., envvar="WEAVIATE_API_KEY", help="Weaviate bearer api key")]
 ):
     ctx.obj = SimpleNamespace()
-    ctx.obj.weaviate_client = WeaviateClient(weaviate_url, weaviate_api_key)
-
+    ctx.obj.app = RagApp(weaviate_url, weaviate_api_key)
     
     #file_path = "/home/niko/Scaricati/PSN_UserGuide_IaaS_Industry_Standardv3.0.3.pdf"
 

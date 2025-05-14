@@ -1,0 +1,73 @@
+{
+    "Document": {
+        "class": "Document",
+        "properties": [
+            {
+                "name": "text",
+                "dataType": [
+                    "text"
+                ]
+            },
+            {
+                "name": "source",
+                "dataType": [
+                    "string"
+                ]
+            },
+            {
+                "name": "size",
+                "dataType": [
+                    "int"
+                ]
+            },
+            {
+                "name": "m_time",
+                "dataType": [
+                    "date"
+                ]
+            }
+        ]
+    },
+    "DocumentChunk": {
+        "class": "DocumentChunk",
+        "vectorizer": "text2vec-ollama",
+        "moduleConfig": {
+            "text2vec-ollama": {
+                "model": "nomic-embed-text",
+                "apiEndpoint": "http://ollama:11434"
+            }
+        },
+        "properties": [
+            {
+                "name": "text",
+                "dataType": [
+                    "text"
+                ]
+            },
+            {
+                "name": "chunk_id",
+                "dataType": [
+                    "int"
+                ]
+            },
+            {
+                "name": "source",
+                "dataType": [
+                    "string"
+                ]
+            },
+            {
+                "name": "size",
+                "dataType": [
+                    "int"
+                ]
+            },
+            {
+                "name": "m_time",
+                "dataType": [
+                    "date"
+                ]
+            }
+        ]
+    }
+}

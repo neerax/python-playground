@@ -6,10 +6,9 @@ from graphql_query import Operation, Query, Field, Argument, Variable
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 import json
 from langchain.schema import Document
-from typing import List
+from typing import List, Dict
 from langchain.schema.retriever import BaseRetriever
-
-
+from requests.exceptions import HTTPError
 
 @lru_cache(maxsize=1)
 def get_splitter(chunk_size=500, chunk_overlap=100):
@@ -78,6 +77,37 @@ class WeaviateClient:
 
     def delete_class(self, class_name):
         return self.api_delete("schema", class_name)
+    
+    def apply_schema(self, definitions: Dict[str, object]) -> Dict[str, object]:
+        
+        created_results: Dict[str, object] = {}
+        skipped_class: list[str] = []
+        failed_class: list[str] = []
+
+        for class_name, definition in definitions.items():
+
+            # print(class_name)
+            # print(definition)
+
+            try:
+                self.get_class(class_name)
+                skipped_class.append(class_name)
+            
+            except HTTPError as e:
+                if e.response.status_code != 404:
+                    raise
+                else:
+                    try:
+                        created = self.create_class(definition)
+                        created_results[class_name] = created
+                    except HTTPError as e:
+                        print(e)
+                        failed_class.append(class_name)
+
+            return (created_results, skipped_class, failed_class)    
+
+        return created_results
+
 
     def ingest_text(self, text, source):
         chunks = split_text_with_langchain(text)
@@ -85,7 +115,15 @@ class WeaviateClient:
         for i, chunk in enumerate(chunks):
             print("Processing CHUNK", i+1, "of", n)
             self.ingest_chunk(chunk, i, source)
-         
+
+
+    def ingest(self, class_name, **kwargs):
+        payload = {
+            "class": class_name,
+            "properties": kwargs
+        }
+        return self.api_post("objects", payload)    
+
     def ingest_chunk(self, text: str, chunk_id: int, source: str):
         obj = {
             "class": "DocumentChunk",
@@ -97,6 +135,26 @@ class WeaviateClient:
         }
 
         return self.api_post("objects", obj)
+
+    def get_objects(self, class_name: str, fields = []):
+        fields.append(Field(name="_additional", fields=["id"]))
+        op = Operation(
+            type="query",
+            queries=[
+                Query(
+                    name="Get",
+                    fields=[
+                        Field(
+                            name = class_name,
+                            fields=fields
+                        )
+                    ]
+                )
+            ]
+        )
+        graphql = op.render()
+        resp = self.api_post("graphql", {"query": graphql})
+        return resp
 
     def get_document_chunk(self, source: str):
         op = Operation(
@@ -179,6 +237,38 @@ class WeaviateClient:
 
         return op.render()
 
+
+    def general_query(self, class_name, text):
+        query = Operation(
+            type="query",
+            queries=[
+                Query(
+                    name="Get",
+                    fields=[  
+                        Field(
+                            name=class_name,
+                            fields = [
+                                "source",
+                                Field(name="_additional", fields=["certainty", "distance","score"])
+                            ],
+                            arguments=[
+                        Argument(
+                            name="bm25",
+                            value = Argument(
+                                name="query",
+                                value = json.dumps(text)
+                            )
+                        )
+                    ]
+                        )       
+                    ]
+                )
+                ]).render()
+
+        print("QUERY", query)
+
+        resp = self.api_post("graphql", {"query": query})["data"]["Get"][class_name]
+        return resp
     def query(self, text: str, k: int = 1, neighbors: int = 1):
         # ——— Prima query: nearText / nearVector
         initial_gql = self.create_query_with_neighbors(text, k, neighbors)
