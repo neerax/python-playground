@@ -58,57 +58,6 @@ def apply_schema(ctx: Context, file_path: str):
     secho(toJson(skipped))
     secho("Failed:", fg=colors.RED)
     secho(toJson(failed))
-
-
-@app.command()
-def create_schema(ctx: Context):
-    payload = {
-                "class": "DocumentChunk",
-                "vectorizer": "text2vec-ollama",
-                "moduleConfig": {
-                    "text2vec-ollama": {
-                        "model": "nomic-embed-text",
-                        "apiEndpoint": "http://ollama:11434"
-                    },
-                    # "generative-openai": {
-                    #     "model": "meta-llama/llama-4-scout-17b-16e-instruct",
-                    #      "base_url": "https://api.groq.com/openai/v1",
-
-                    # },
-                    # "qna-openai": {},
-                },
-                "properties": [
-                    {
-                        "name": "text",
-                        "dataType": ["text"]
-                    },
-                    {
-                        "name": "chunk_id",
-                        "dataType": ["int"]
-                    },
-                    {
-                        "name": "source",
-                        "dataType": ["string"]
-                    },
-                    {
-                        "name": "size",
-                        "dataType": ["int64"]
-                    },
-                    {
-                        "name": "m_time",
-                        "dataType": ["date"],
-                    }
-                ]
-            }
-
-    try:
-        created = ctx.obj.weaviate_client.create_class(payload)
-        echo(toJson(created))
-    except HTTPError as e:
-        # if (e.response.status_code == 422):
-        #     secho(f"cannot create error, api returns 422 status code, already exists?", err=True, fg=colors.RED)
-        # else:
-            raise
     
 @app.command()
 def get_class(ctx: Context, class_name: Annotated[str, Argument(...)]):
@@ -130,16 +79,16 @@ def ingest(ctx: Context, file_path: str, recursive: Annotated[bool, Option("--re
     ctx.obj.app.ingest_path(file_path, recursive)
     
 
-@app.command()
-def ingest_file(ctx: Context, file_path: Annotated[str, Argument(...)]):
-    delete_chunks_by_source(ctx, file_path)
-    extracted_text = put_tika(file_path)
-    ctx.obj.weaviate_client.ingest_text(extracted_text, file_path)
+# @app.command()
+# def ingest_file(ctx: Context, file_path: Annotated[str, Argument(...)]):
+#     delete_chunks_by_source(ctx, file_path)
+#     extracted_text = put_tika(file_path)
+#     ctx.obj.weaviate_client.ingest_text(extracted_text, file_path)
     
-@app.command()
-def get_document_chunk(ctx: Context, source: str):
-    resp = ctx.obj.weaviate_client.get_document_chunk(str)
-    echo(toJson(resp))
+# @app.command()
+# def get_document_chunk(ctx: Context, source: str):
+#     resp = ctx.obj.weaviate_client.get_document_chunk(str)
+#     echo(toJson(resp))
 
 @app.command()
 def show_documents(ctx: Context):
@@ -147,6 +96,7 @@ def show_documents(ctx: Context):
     for document in documents:
         secho(document["_additional"]["id"])
         secho(document["source"])
+        secho(document["vectorized"])
 #        print(document)
 
 @app.command()
@@ -189,29 +139,43 @@ def chat(
     )
 
 @app.command()
+def patch_object(
+    ctx: Context,
+    class_name: str,
+    id: str,
+    body: str
+):
+    w = ctx.obj.app.get_weaviate_client()
+    w.patch_object(class_name, id, json.loads(body))
+
+@app.command()
 def test(
     ctx: Context
 ):
 
+    w = ctx.obj.app.get_weaviate_client()
+
+
+
     #print (ctx.obj.app.get_weaviate_client().build_graphql_where_argument(d).render())
-    print (ctx.obj.app.get_weaviate_client().super_search("Document", {
-            "where": {
-                "operator": "Equal",
-                "path": ["source"],
-                "valueString": "/home/niko/Sviluppo/python-playground/rag/rag/documenti/PSN_UserGuide_IaaS_Industry_Standardv3.0.3.pdf"
-            }
-        }, properties=["size", "source","m_time"],additional=["id"]))
+    # print (ctx.obj.app.get_weaviate_client().super_search("Document", {
+    #         "where": {
+    #             "operator": "Equal",
+    #             "path": ["source"],
+    #             "valueString": "/home/niko/Sviluppo/python-playground/rag/rag/documenti/PSN_UserGuide_IaaS_Industry_Standardv3.0.3.pdf"
+    #         }
+    #     }, properties=["size", "source","m_time"],additional=["id"]))
     
-    print (ctx.obj.app.get_weaviate_client().super_search("Document",{
-            "bm25": {
-                "query": "Cloud"
-            },
-            "where": {
-                "operator": "Equal",
-                "path": ["source"],
-                "valueString": "/home/niko/Sviluppo/python-playground/rag/rag/documenti/PSN_UserGuide_IaaS_Industry_Standardv3.0.3.pdf"
-            }
-        }, properties=["size", "source","m_time"],additional=["id","score"]))
+    # print (ctx.obj.app.get_weaviate_client().super_search("Document",{
+    #         "bm25": {
+    #             "query": "Cloud"
+    #         },
+    #         "where": {
+    #             "operator": "Equal",
+    #             "path": ["source"],
+    #             "valueString": "/home/niko/Sviluppo/python-playground/rag/rag/documenti/PSN_UserGuide_IaaS_Industry_Standardv3.0.3.pdf"
+    #         }
+    #     }, properties=["size", "source","m_time"],additional=["id","score"]))
     
 
 @app.callback()

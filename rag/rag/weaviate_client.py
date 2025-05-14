@@ -9,6 +9,8 @@ from langchain.schema import Document
 from typing import List, Dict
 from langchain.schema.retriever import BaseRetriever
 from requests.exceptions import HTTPError
+from urllib.parse import urlencode
+
 
 @lru_cache(maxsize=1)
 def get_splitter(chunk_size=500, chunk_overlap=100):
@@ -30,10 +32,13 @@ class WeaviateClient:
             **({"Authorization": "Bearer "+weaviate_api_key} if weaviate_api_key else {})
         }
 
-    def api_build_url(self, name, additional=None, version="v1"):
+    def api_build_url(self, name, additional=None, version="v1", params = None):
         url = self.url+version+'/'+name
         if additional:
             url += "/" + additional
+        if params:
+            query_string = urlencode(params)
+            url += '?' + query_string
         return url
 
     def api_get(self, name, additional="", version="v1"):
@@ -59,6 +64,12 @@ class WeaviateClient:
         resp = requests.delete(url, headers=self.headers)
         resp.raise_for_status()
         return
+    
+    def api_patch(self, name, body, additional="", version="v1", params = None):
+        url = self.api_build_url(name, additional, version, params)
+        resp = requests.patch(url, json=body, headers = self.headers)
+        resp.raise_for_status()
+        return resp
 
     def api_delete_with_json(self, name, additional="", body=None, version="v1"):
         url = self.api_build_url(name, additional, version)
@@ -85,10 +96,6 @@ class WeaviateClient:
         failed_class: list[str] = []
 
         for class_name, definition in definitions.items():
-
-            # print(class_name)
-            # print(definition)
-
             try:
                 self.get_class(class_name)
                 skipped_class.append(class_name)
@@ -108,14 +115,12 @@ class WeaviateClient:
 
         return created_results
 
-
     def ingest_text(self, text, source):
         chunks = split_text_with_langchain(text)
         n = len(chunks)
         for i, chunk in enumerate(chunks):
             print("Processing CHUNK", i+1, "of", n)
             self.ingest_chunk(chunk, i, source)
-
 
     def ingest(self, class_name, **kwargs):
         payload = {
@@ -156,6 +161,8 @@ class WeaviateClient:
         resp = self.api_post("graphql", {"query": graphql})
         return resp
 
+    def patch_object(self, class_name, id, body):
+        return self.api_patch("objects", body, additional = class_name + '/' +  id)
 
     def build_graphql_values_from_simple_condition(self, condition : Dict):
         return [
@@ -199,8 +206,7 @@ class WeaviateClient:
         )
         return argument
 
-
-    def super_search(self, class_name: str, variables: Dict, properties: List, additional=List):
+    def super_search(self, class_name: str, variables: Dict, properties: List = [], additional : List = []):
 
         TYPE_MAP = {
             "where": "GetObjectsDocumentWhereInpObj!",
@@ -247,81 +253,8 @@ class WeaviateClient:
             "variables": variables
         })
 
-        return resp
-
-    
-    # FUNZIONANTE
-    # def test(self):
-    #     nomefile = Variable(name="nomefile", type="TextStringGetObjectsDocument")
-    #     query = Query(name="Get", fields=[
-    #         Field(name = "Document", arguments=[
-    #             Argument(name="where", value=[
-    #                 { "name" : "operator", "value": "Equal"},
-    #                 { "name" : "path", "value": ["source"]},
-    #                 { "name" : "valueString", "value": nomefile}
-                    
-    #             ])
-    #         ], fields=["size"])
-    #     ])
-    #     operation = Operation(queries=[query], variables=[nomefile])
-        
-        
-    #     q = operation.render()
-
-    #     print(q)
-
-    #     resp = self.api_post("graphql", {"query": q, "variables": {
-    #         "nomefile":"/home/niko/Sviluppo/python-playground/rag/rag/documenti/PSN_UserGuide_IaaS_Industry_Standardv3.0.3.pdf"}
-    #     })
-
-    #     return resp
-    def get_object_by_where_condition(self, class_name: str, condition: Dict):
-        pass
-        
-
-        
-#         "where": {
-#                 "path": ["source"],
-#                 "operator": "Equal",
-#                 "valueString": source
-#               }
-        
-# Article(where: {
-#       operator: And,
-#       operands: [{
-#           path: ["wordCount"],
-#           operator: GreaterThan,
-#           valueInt: 1000
-#         }, {
-#           path: ["title"],
-#           operator: Like,
-#           valueText:"*economy*"
-#         }]
-#       }) {
-#       title
-#     }
-
-#         where_arg = Argument(
-#                 name="where",
-#                 value=[
-#                     Argument(name="operator", value="Or"),
-#                     Argument(
-#                         name="operands",
-#                         value=[
-#                             [
-#                                 Argument(name="path", value=["chunk_id"]),
-#                                 Argument(name="operator", value="Equal"),
-#                                 Argument(name="valueInt", value=cid),
-#                             ]
-#                             for cid in neighbor_ids
-#                         ]
-#                     )
-#                 ]
-#             )
-        
-
-
-
+        return resp['data']['Get'][class_name]
+                
     def get_document_chunk(self, source: str):
         op = Operation(
             type="query",
@@ -402,7 +335,6 @@ class WeaviateClient:
             )
 
         return op.render()
-
 
     def query(self, text: str, k: int = 1, neighbors: int = 1):
         # ——— Prima query: nearText / nearVector
@@ -573,9 +505,6 @@ class WeaviateClient:
         gql = op.render()
         resp = self.api_post("graphql", {"query": gql})
         return resp.get("data", {}).get("Get", {}).get("DocumentChunk", [])
-
-
-
 
 class WeaviateRetriever(BaseRetriever):
     client: WeaviateClient
