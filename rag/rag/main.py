@@ -165,11 +165,10 @@ def query(
     echo(toJson(resp))
 
 @app.command()
-def general_query(ctx: Context, class_name: str, text: str):
-    result = ctx.obj.app.get_weaviate_client().general_query(class_name, text)
+def bm25(ctx: Context, class_name: str, text: str):
+    result = ctx.obj.app.bm25(class_name, text)
     print("DOCUMENTI TROVATI", len(result))
     echo(toJson(result))
-    
 
 @app.command()
 def chat(
@@ -195,7 +194,7 @@ def test(
 ):
 
     #print (ctx.obj.app.get_weaviate_client().build_graphql_where_argument(d).render())
-    print (ctx.obj.app.get_weaviate_client().super_search({
+    print (ctx.obj.app.get_weaviate_client().super_search("Document", {
             "where": {
                 "operator": "Equal",
                 "path": ["source"],
@@ -203,7 +202,7 @@ def test(
             }
         }, properties=["size", "source","m_time"],additional=["id"]))
     
-    print (ctx.obj.app.get_weaviate_client().super_search({
+    print (ctx.obj.app.get_weaviate_client().super_search("Document",{
             "bm25": {
                 "query": "Cloud"
             },

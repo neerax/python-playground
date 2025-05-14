@@ -200,7 +200,7 @@ class WeaviateClient:
         return argument
 
 
-    def super_search(self, variables: Dict, properties: List, additional=List):
+    def super_search(self, class_name: str, variables: Dict, properties: List, additional=List):
 
         TYPE_MAP = {
             "where": "GetObjectsDocumentWhereInpObj!",
@@ -229,7 +229,7 @@ class WeaviateClient:
             name="Get",
             fields=[
                 Field(
-                    name="Document",
+                    name=class_name,
                     arguments=arguments,
                     fields=fields
                 )
@@ -246,7 +246,7 @@ class WeaviateClient:
             "query": q,
             "variables": variables
         })
-        
+
         return resp
 
     
@@ -404,43 +404,6 @@ class WeaviateClient:
         return op.render()
 
 
-    def general_query(self, class_name, text):
-
-        variables = Variable(name="testo", type="String")
-
-        query = Operation(
-            type="query",
-            variables = [variables],
-            queries=[
-                Query(
-                    name="Get",
-                    fields=[  
-                        Field(
-                            name=class_name,
-                            fields = [
-                                "source",
-                                Field(name="_additional", fields=["certainty", "distance","score"])
-                            ],
-                            arguments=[
-                                Argument(
-                                    name="bm25",
-                                    value = Argument(
-                                        name="query",
-                                        value = variables
-                                    )
-                                )
-                            ]
-                        )       
-                    ]
-                )
-            ]
-        ).render()
-
-        print("QUERY", query)
-
-        resp = self.api_post("graphql", {"query": query, "variables": {"testo":text}})["data"]["Get"][class_name]
-        return resp
-    
     def query(self, text: str, k: int = 1, neighbors: int = 1):
         # ——— Prima query: nearText / nearVector
         initial_gql = self.create_query_with_neighbors(text, k, neighbors)

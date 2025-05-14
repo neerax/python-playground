@@ -67,7 +67,7 @@ class RagApp:
         
         #self.weaviate_client.delete_chunks_by_source(file_path)
         extracted_text = put_tika(file_path)
-        self.weaviate_client.ingest("Document", text=extracted_text, source=file_path, size=size, m_time = m_time)
+        self.weaviate_client.ingest("Document", text=extracted_text, source=file_path, size=size, m_time = m_time, vectorized=False)
         #self.weaviate_client.ingest_text(extracted_text, file_path)
 
     def ingest_path(self, path: str, recursive: bool = False):
@@ -75,5 +75,25 @@ class RagApp:
     
     def get_documents(self):
         return self.weaviate_client.get_objects("Document",["text","source"])['data']['Get']['Document']
+    
+    def bm25(self, class_name, text):
+        return self.weaviate_client.super_search(
+            class_name,
+            {
+                "bm25": {
+                    "query": text
+                }
+            },
+            properties=[
+                "size",
+                "source",
+                "m_time",
+                "vectorized"
+            ],
+            additional=[
+                "id",
+                "score"
+            ]
+        )
     
         
