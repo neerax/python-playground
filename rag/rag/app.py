@@ -54,6 +54,7 @@ class RagApp:
 
     def ingest_file(self, file_path):
         print("processing file", file_path)
+        
         #self.weaviate_client.delete_chunks_by_source(file_path)
         extracted_text = put_tika(file_path)
         self.weaviate_client.ingest("Document", text=extracted_text, source=file_path)

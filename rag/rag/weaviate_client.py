@@ -156,6 +156,52 @@ class WeaviateClient:
         resp = self.api_post("graphql", {"query": graphql})
         return resp
 
+    def build_graphql_argument_from_condition(condition : Dict):
+
+    def get_object_by_where_condition(class_name: str, condition: Dict):
+        
+        "where": {
+                "path": ["source"],
+                "operator": "Equal",
+                "valueString": source
+              }
+        
+Article(where: {
+      operator: And,
+      operands: [{
+          path: ["wordCount"],
+          operator: GreaterThan,
+          valueInt: 1000
+        }, {
+          path: ["title"],
+          operator: Like,
+          valueText:"*economy*"
+        }]
+      }) {
+      title
+    }
+
+        where_arg = Argument(
+                name="where",
+                value=[
+                    Argument(name="operator", value="Or"),
+                    Argument(
+                        name="operands",
+                        value=[
+                            [
+                                Argument(name="path", value=["chunk_id"]),
+                                Argument(name="operator", value="Equal"),
+                                Argument(name="valueInt", value=cid),
+                            ]
+                            for cid in neighbor_ids
+                        ]
+                    )
+                ]
+            )
+        
+
+
+
     def get_document_chunk(self, source: str):
         op = Operation(
             type="query",
