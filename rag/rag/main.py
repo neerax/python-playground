@@ -189,6 +189,30 @@ def chat(
         neighbors=neighbors
     )
 
+@app.command()
+def test(
+    ctx: Context
+):
+    # d = {
+    #     "operator": "Equal",
+    #     "path": ["source"],
+    #     "valueString": "/home/niko/Scaricati/PSN_UserGuide_IaaS_Industry_Standardv3.0.3.pdf"
+    # }
+
+    d = {
+        "operator": "And",
+        "operands": [
+            {
+                "operator": "Equal",
+                "path": ["chunk_id"],
+                "valueString": "blah"
+            }
+        ]
+    }
+
+    print (ctx.obj.app.get_weaviate_client().build_graphql_where_argument(d).render())
+    
+
 @app.callback()
 def main(
     ctx: Context,

@@ -156,48 +156,93 @@ class WeaviateClient:
         resp = self.api_post("graphql", {"query": graphql})
         return resp
 
-    def build_graphql_argument_from_condition(condition : Dict):
 
-    def get_object_by_where_condition(class_name: str, condition: Dict):
-        
-        "where": {
-                "path": ["source"],
-                "operator": "Equal",
-                "valueString": source
-              }
-        
-Article(where: {
-      operator: And,
-      operands: [{
-          path: ["wordCount"],
-          operator: GreaterThan,
-          valueInt: 1000
-        }, {
-          path: ["title"],
-          operator: Like,
-          valueText:"*economy*"
-        }]
-      }) {
-      title
-    }
+    def build_graphql_values_from_simple_condition(self, condition : Dict):
+        return [
+                Argument( name = "operator", value = condition["operator"] ),
+                Argument( name = "name", value = condition["path"] ),
+                Argument( name = "valueString", value = condition["valueString"])
+        ]
+        return argument
 
-        where_arg = Argument(
-                name="where",
-                value=[
-                    Argument(name="operator", value="Or"),
-                    Argument(
-                        name="operands",
-                        value=[
-                            [
-                                Argument(name="path", value=["chunk_id"]),
-                                Argument(name="operator", value="Equal"),
-                                Argument(name="valueInt", value=cid),
-                            ]
-                            for cid in neighbor_ids
-                        ]
-                    )
-                ]
-            )
+    def build_graphql_argument_from_multiple_conditions(self, condition: Dict):
+        operands = condition["operands"]
+        arguments = []
+        for operand in operands:
+            arguments.append(self.build_graphql_values_from_simple_condition(operand))
+        return arguments
+
+    def build_graphql_values_from_condition(self, condition : Dict):
+
+        if "operands" in condition:
+            return [
+                Argument(
+                    name="operator",
+                    value = condition["operator"]
+                ),
+                Argument(
+                    name="operands",
+                    value = self.build_graphql_argument_from_multiple_conditions(condition)
+                )
+
+            ]
+        
+        return Argument(
+            name = condition["operator"],
+            value = self.build_graphql_values_from_simple_condition(condition)
+        )
+
+    def build_graphql_where_argument(self, condition: Dict):
+        argument = Argument(
+            name = "where",
+            value = self.build_graphql_values_from_condition(condition)
+        )
+        return argument
+
+        
+    def get_object_by_where_condition(self, class_name: str, condition: Dict):
+        pass
+        
+
+        
+#         "where": {
+#                 "path": ["source"],
+#                 "operator": "Equal",
+#                 "valueString": source
+#               }
+        
+# Article(where: {
+#       operator: And,
+#       operands: [{
+#           path: ["wordCount"],
+#           operator: GreaterThan,
+#           valueInt: 1000
+#         }, {
+#           path: ["title"],
+#           operator: Like,
+#           valueText:"*economy*"
+#         }]
+#       }) {
+#       title
+#     }
+
+#         where_arg = Argument(
+#                 name="where",
+#                 value=[
+#                     Argument(name="operator", value="Or"),
+#                     Argument(
+#                         name="operands",
+#                         value=[
+#                             [
+#                                 Argument(name="path", value=["chunk_id"]),
+#                                 Argument(name="operator", value="Equal"),
+#                                 Argument(name="valueInt", value=cid),
+#                             ]
+#                             for cid in neighbor_ids
+#                         ]
+#                     )
+#                 ]
+#             )
         
 
 
