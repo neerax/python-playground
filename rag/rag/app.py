@@ -3,6 +3,21 @@ from typing import Callable
 from weaviate_client import WeaviateClient
 from auth import get_oauth_session
 from datetime import datetime, timezone
+from functools import lru_cache
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+
+
+@lru_cache(maxsize=1)
+def get_splitter(chunk_size=500, chunk_overlap=100):
+    return RecursiveCharacterTextSplitter(
+        chunk_size=chunk_size,
+        chunk_overlap=chunk_overlap,
+        separators=["\n\n", "\n", ".", "!", "?", " ", ""]
+    )
+
+def split_text_with_langchain(text: str, chunk_size: int = 1000, chunk_overlap: int = 200) -> list[str]:
+    splitter = get_splitter(chunk_size, chunk_overlap)
+    return splitter.split_text(text)
 
 
 def file_func_call(
@@ -88,18 +103,27 @@ class RagApp:
             return None
         return result["_additional"]["id"]
 
+    def ingest_chunks(self, text, source):
+        chunks = split_text_with_langchain(text)
+        n = len(chunks)
+        for i, chunk in enumerate(chunks):
+            print("Processing CHUNK", i+1, "of", n)
+            self.weaviate_client.ingest("DocumentChunk", text=chunk, source=source, chunk_id=i)
+
     def ingest_file(self, file_path, size, m_time):
         print("processing file", file_path, size, m_time)
         
         id = self.get_document_id_by_file_path(file_path)
 
-        print("ID",id)
+        print("ID", id)
 
         if id is None:
             #self.weaviate_client.delete_chunks_by_source(file_path)
             extracted_text = put_tika(file_path)
-            self.weaviate_client.ingest("Document", text=extracted_text, source=file_path, size=size, m_time = m_time, vectorized=False)
-            #self.weaviate_client.ingest_text(extracted_text, file_path)
+            result = self.weaviate_client.ingest("Document", text=extracted_text, source=file_path, size=size, m_time = m_time, vectorized=False)
+            id = result["id"]
+            self.ingest_chunks(extracted_text, file_path)
+            self.weaviate_client.patch_object("Document", id, {"vectorized": True})
         else:
             print("skipping", file_path)
 

@@ -19,7 +19,7 @@ def _load_token() -> dict | None:
     except (FileNotFoundError, json.JSONDecodeError):
         return None
 
-def _save_token(token: dict):
+def _save_token(token: dict, access_token):
     token_file = os.getenv("TOKEN_FILE", "token.json")
     with open(token_file, "w") as f:
         json.dump(token, f, indent=2)
@@ -40,7 +40,7 @@ def get_oauth_session() -> OAuth2Session:
         update_token = _save_token
     )
     
-    session.fetch_token(grant_type="client_credentials")
+    session.fetch_token()
 
     return session
 

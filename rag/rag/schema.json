@@ -60,7 +60,12 @@
                 "name": "source",
                 "dataType": [
                     "string"
-                ]
+                ],
+                "moduleConfig": {
+                    "text2vec-ollama": {
+                        "skip": true
+                    }
+                }
             },
             {
                 "name": "size",

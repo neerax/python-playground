@@ -62,7 +62,7 @@ def apply_schema(ctx: Context, file_path: str):
 @app.command()
 def get_class(ctx: Context, class_name: Annotated[str, Argument(...)]):
     try:
-        class_schema = ctx.obj.weaviate_client.get_class(class_name)
+        class_schema = ctx.obj.app.get_weaviate_client().get_class(class_name)
         print(toJson(class_schema))
     except HTTPError as e:
         if e.response.status_code == 404:

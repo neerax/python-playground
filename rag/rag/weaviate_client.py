@@ -1,9 +1,7 @@
-import os
 import requests
-from functools import lru_cache
+
 from dotenv import load_dotenv
 from graphql_query import Operation, Query, Field, Argument, Variable
-from langchain.text_splitter import RecursiveCharacterTextSplitter
 import json
 from langchain.schema import Document
 from typing import List, Dict
@@ -11,18 +9,6 @@ from langchain.schema.retriever import BaseRetriever
 from requests.exceptions import HTTPError
 from urllib.parse import urlencode
 
-
-@lru_cache(maxsize=1)
-def get_splitter(chunk_size=500, chunk_overlap=100):
-    return RecursiveCharacterTextSplitter(
-        chunk_size=chunk_size,
-        chunk_overlap=chunk_overlap,
-        separators=["\n\n", "\n", ".", "!", "?", " ", ""]
-    )
-
-def split_text_with_langchain(text: str, chunk_size: int = 1000, chunk_overlap: int = 200) -> list[str]:
-    splitter = get_splitter(chunk_size, chunk_overlap)
-    return splitter.split_text(text)
 
 class WeaviateClient:
     def __init__(self, url, weaviate_api_key):
@@ -111,16 +97,10 @@ class WeaviateClient:
                         print(e)
                         failed_class.append(class_name)
 
-            return (created_results, skipped_class, failed_class)    
+        return (created_results, skipped_class, failed_class)    
 
-        return created_results
 
-    def ingest_text(self, text, source):
-        chunks = split_text_with_langchain(text)
-        n = len(chunks)
-        for i, chunk in enumerate(chunks):
-            print("Processing CHUNK", i+1, "of", n)
-            self.ingest_chunk(chunk, i, source)
+    
 
     def ingest(self, class_name, **kwargs):
         payload = {
