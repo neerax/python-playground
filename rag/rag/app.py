@@ -62,7 +62,17 @@ class RagApp:
         return self.weaviate_client
 
     def get_document_by_file_path(self, file_path : str):
-        result = self.weaviate_client.super_search("Document", { "source" : file_path }, additional=["id"])
+        result = self.weaviate_client.super_search(
+            "Document",
+            { "where": 
+                {
+                    "operator": "Equal",
+                    "path" : ["source"],
+                    "valueString" : file_path
+                }
+            },
+            additional=["id"]
+        )
         result_length = len (result)
         if result_length > 1:
             raise Exception("document by path returned more then 1 document")
