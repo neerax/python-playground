@@ -111,7 +111,7 @@ def query(
     k: Annotated[int, Option("--k", "-k", help="Number of top results", show_default=True)] = 3,
     neighbors: Annotated[int, Option("--neighbors", "-n", help="Number of neighbor chunks to include", show_default=True)] = 1
 ):
-    resp = ctx.obj.weaviate_client.query(text, k, neighbors)
+    resp = ctx.obj.app.nearText(text, k, neighbors)
     echo(toJson(resp))
 
 @app.command()
@@ -147,6 +147,54 @@ def patch_object(
 ):
     w = ctx.obj.app.get_weaviate_client()
     w.patch_object(class_name, id, json.loads(body))
+
+@app.command()
+def get_document_by_path(
+    ctx: Context,
+    path: str
+):
+    w = ctx.obj.app.get_document_by_file_path(path)
+    print(w)
+
+@app.command()
+def get_chunks_by_path(
+    ctx: Context,
+    path: str
+):
+    w = ctx.obj.app.get_chunks_by_file_path(path)
+    print(w)
+
+@app.command()
+def delete_document_by_path(
+    ctx: Context,
+    path: str
+):
+    w = ctx.obj.app.delete_documents_by_source(path)
+    print(w)
+
+
+@app.command()
+def delete_chunks_by_path(
+    ctx: Context,
+    path: str
+):
+    w = ctx.obj.app.delete_chunks_by_source(path)
+
+@app.command()
+def chunks_near_text(
+    ctx: Context,
+    text: str,
+    k: int,
+    neighbors: int
+):
+    w = ctx.obj.app.chunks_near_text(text, k, neighbors)
+    print(len(w))
+    print(w)
+    
+        
+
+##    print(w)
+
 
 @app.command()
 def test(

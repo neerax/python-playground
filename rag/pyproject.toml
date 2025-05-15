@@ -15,6 +15,7 @@ graphql-query = "^1.4.0"
 typer = "^0.15.3"
 click = "8.1.7"
 langchain-groq = "^0.3.2"
+python-dateutil = "^2.9.0.post0"
 
 
 [build-system]

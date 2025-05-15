@@ -189,8 +189,10 @@ class WeaviateClient:
     def super_search(self, class_name: str, variables: Dict, properties: List = [], additional : List = []):
 
         TYPE_MAP = {
-            "where": "GetObjectsDocumentWhereInpObj!",
-            "bm25": "GetObjectsDocumentHybridGetBm25InpObj!"
+            "where": "GetObjects"+class_name+"WhereInpObj!",
+            "bm25": "GetObjects"+class_name+"HybridGetBm25InpObj!",
+            "nearText": "GetObjects"+class_name+"NearTextInpObj!",
+            #"limit": "Int!" ERRORE GRAVOTTO
         }
 
         variable_objs = {
@@ -205,6 +207,9 @@ class WeaviateClient:
             Argument(name=name, value=variable_objs[name])
             for name in variable_objs
         ]
+
+        if "limit" in variables:
+            arguments.append(Argument(name="limit", value=variables["limit"]))
 
         fields = properties
         if (additional):
@@ -228,10 +233,16 @@ class WeaviateClient:
 
         q = operation.render()
 
+        print("QUERY",q, variables)
+
         resp = self.api_post("graphql", {
             "query": q,
             "variables": variables
         })
+
+        #print(resp)
+
+        #print (resp['errors'])
 
         return resp['data']['Get'][class_name]
                 
@@ -259,6 +270,20 @@ class WeaviateClient:
 
         return resp
     
+    def delete_objects(self, class_name: str, where: Dict):
+        payload = {
+            "match": {
+              "class": class_name,
+              "where": where
+            },
+            "output": "verbose",
+            "dryRun": False
+        }
+
+        resp = self.api_delete_with_json("batch", "objects", payload)
+
+        return resp
+
     def delete_document_chunks_by_source(self, source: str):
 
         payload = {
@@ -316,7 +341,25 @@ class WeaviateClient:
 
         return op.render()
 
-    def query(self, text: str, k: int = 1, neighbors: int = 1):
+    def nearText(self, class_name: str, text: str, properties : list[str], additional: list[str], k: int = 1, neighbors: int = 1):
+
+        for a in ['certainty', 'distance', 'score']:
+            if not a in additional:
+                additional.append(a)
+
+        objects = self.super_search(
+            class_name,
+            {
+                "nearText": {
+                    "concepts": [text],
+                },
+                "limit": k
+            },
+            properties=properties,
+            additional=additional
+        )
+
+        return objects
         # ——— Prima query: nearText / nearVector
         initial_gql = self.create_query_with_neighbors(text, k, neighbors)
         initial_resp = self.api_post("graphql", {"query": initial_gql})
