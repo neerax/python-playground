@@ -26,10 +26,11 @@ async def test_run():
     tool.valves.WEAVIATE_URL = os.getenv("WEAVIATE_URL")
     tool.valves.WEAVIATE_API_KEY = os.getenv("WEAVIATE_API_KEY")
     tool.valves.WEAVIATE_K = 10
+    tool.valves.neighbours = 2
 
 
     emitter = CollectorEmitter()
-    result = await tool.run("piano di migrazione al cloud", __event_emitter__=emitter.emit)
+    result = await tool.search("piano di migrazione al cloud", __event_emitter__=emitter.emit)
 
     print("Result:", len(result["results"]))
 

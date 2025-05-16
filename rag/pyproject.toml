@@ -2,7 +2,7 @@
 name = "rag"
 version = "0.1.0"
 description = ""
-authors = ["Niko! <nicola.ranaldo@gmail.com>"]
+authors = ["Nicola Ranaldo <nicola.ranaldo@gmail.com>"]
 readme = "README.md"
 
 [tool.poetry.dependencies]

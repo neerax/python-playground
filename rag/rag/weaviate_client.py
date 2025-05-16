@@ -1,21 +1,19 @@
 import requests
 
 from dotenv import load_dotenv
-from graphql_query import Operation, Query, Field, Argument, Variable
-import json
+from graphql_query import Operation, Query, Field as GField, Argument, Variable
 from langchain.schema import Document
 from typing import List, Dict
 from langchain.schema.retriever import BaseRetriever
 from requests.exceptions import HTTPError
 from urllib.parse import urlencode
 
-
 class WeaviateClient:
     def __init__(self, url, weaviate_api_key):
         self.url = url.rstrip('/')+'/'
         self.headers = {
             "Content-Type": "application/json",
-            **({"Authorization": "Bearer "+weaviate_api_key} if weaviate_api_key else {})
+            **({"Authorization": "Bearer " + weaviate_api_key} if weaviate_api_key else {})
         }
 
     def api_build_url(self, name, additional=None, version="v1", params = None):
@@ -99,27 +97,12 @@ class WeaviateClient:
 
         return (created_results, skipped_class, failed_class)    
 
-
-    
-
     def ingest(self, class_name, **kwargs):
         payload = {
             "class": class_name,
             "properties": kwargs
         }
         return self.api_post("objects", payload)    
-
-    def ingest_chunk(self, text: str, chunk_id: int, source: str):
-        obj = {
-            "class": "DocumentChunk",
-            "properties": {
-                "text": text,
-                "chunk_id": chunk_id,
-                "source": source
-            }
-        }
-
-        return self.api_post("objects", obj)
 
     def get_objects(self, class_name: str, fields = []):
         fields.append(Field(name="_additional", fields=["id"]))
@@ -129,7 +112,7 @@ class WeaviateClient:
                 Query(
                     name="Get",
                     fields=[
-                        Field(
+                        GField(
                             name = class_name,
                             fields=fields
                         )
@@ -143,48 +126,6 @@ class WeaviateClient:
 
     def patch_object(self, class_name, id, body):
         return self.api_patch("objects", body, additional = class_name + '/' +  id)
-
-    def build_graphql_values_from_simple_condition(self, condition : Dict):
-        return [
-                { "name": "operator", "value": condition["operator"] },
-                { "name": "name", "value" : condition["path"] },
-                { "name": "valueString", "value" : json.dumps(condition["valueString"])}
-        ]
-        return argument
-
-    def build_graphql_argument_from_multiple_conditions(self, condition: Dict):
-        operands = condition["operands"]
-        arguments = []
-        for operand in operands:
-            arguments.append(self.build_graphql_values_from_simple_condition(operand))
-        return arguments
-
-    def build_graphql_values_from_condition(self, condition : Dict):
-
-        if "operands" in condition:
-            return [
-                Argument(
-                    name="operator",
-                    value = condition["operator"]
-                ),
-                Argument(
-                    name="operands",
-                    value = self.build_graphql_argument_from_multiple_conditions(condition)
-                )
-
-            ]
-        
-        return Argument(
-            name = condition["operator"],
-            value = self.build_graphql_values_from_simple_condition(condition)
-        )
-
-    def build_graphql_where_argument(self, condition: Dict):
-        argument = Argument(
-            name = "where",
-            value = self.build_graphql_values_from_condition(condition)
-        )
-        return argument
 
     def super_search(self, class_name: str, variables: Dict, properties: List = [], additional : List = [], neighbors = 0, neighbors_index_name="chunk_id", key_property_name="source"):
 
@@ -213,13 +154,13 @@ class WeaviateClient:
 
         fields = properties
         if (additional):
-            additional_field = Field(name="_additional", fields=additional)
+            additional_field = GField(name="_additional", fields=additional)
             fields.append(additional_field)
 
         query = Query(
             name="Get",
             fields=[
-                Field(
+                GField(
                     name=class_name,
                     arguments=arguments,
                     fields=fields
@@ -242,7 +183,6 @@ class WeaviateClient:
 
         objects=resp['data']['Get'][class_name]
 
-        # ——— Se voglio i N vicini…
         if neighbors > 0 and objects:
             # 1) costruisco (chunk_id, source) dei vicini
             neighbor_pairs = set()
@@ -290,33 +230,11 @@ class WeaviateClient:
             # 4) unisco e ordino
             objects.extend(neighbor_objs)
 
-        # 5) ordino tutto per chunk_id e restituisco
-        return sorted(objects, key=lambda x: x[neighbors_index_name])
-                
-    def get_document_chunk(self, source: str):
-        op = Operation(
-            type="query",
-            queries=[
-                Query(
-                    name="Get",
-                    fields=[
-                        Field(
-                            name="DocumentChunk",
-                            fields=["chunk_id",
-                                Field(name="_additional", fields=["id"])
-                            ]
-                        )
-                    ]
-                )
-            ]
-        )
-
-        graphql = op.render()
-
-        resp = self.api_post("graphql", {"query": graphql})
-
-        return resp
-    
+        if objects and neighbors_index_name in objects[0]:
+            return sorted(objects, key=lambda x: x[neighbors_index_name])
+        
+        return objects
+                        
     def delete_objects(self, class_name: str, where: Dict):
         payload = {
             "match": {
@@ -350,43 +268,6 @@ class WeaviateClient:
 
         return resp
 
-    def create_query_with_neighbors(self,
-        query: str,
-        k: int = 1,
-        neighbors: int = 1,
-        vector: list[float] | None = None
-    ):
-        # build the nearText / nearVector argument
-        if vector is not None:
-            filter_arg = Argument(
-                name="nearVector",
-                value=[Argument(name="vector", value=vector)]
-            )
-        else:
-            filter_arg = Argument(
-                name="nearText",
-                value=[Argument(name="concepts", value=[query])]
-            )
-
-        limit_arg = Argument(name="limit", value=k)
-
-        document_chunk_field = Field(
-            name="DocumentChunk",
-            arguments=[filter_arg, limit_arg],
-            fields=["chunk_id", "text", Field(name="_additional", fields=["certainty", "distance","score"])]
-        )
-
-        op = Operation(
-            type="query",
-            queries=[
-                Query(
-                    name="Get",
-                    fields=[document_chunk_field]
-                )
-            ]
-            )
-
-        return op.render()
 
     def nearText(self, class_name: str, text: str, properties : list[str], additional: list[str], k: int = 1, neighbors: int = 1, neighbors_property_name: str = "chunk_id", same_property_name: str = "source"):
 
@@ -415,55 +296,8 @@ class WeaviateClient:
             key_property_name=same_property_name
         )
 
-        
         return objects
         
-
-        # ——— Calcolo IDs estesi (inclusi vicini)
-        
-
-        # ——— Filtra solo i vicini che non erano in main_ids
-        
-
-        neighbor_chunks = []
-        if neighbor_ids:
-            # costruiamo un singolo where con questi neighbor_ids
-            where_arg = Argument(
-                name="where",
-                value=[
-                    Argument(name="operator", value="Or"),
-                    Argument(
-                        name="operands",
-                        value=[
-                            [
-                                Argument(name="path", value=["chunk_id"]),
-                                Argument(name="operator", value="Equal"),
-                                Argument(name="valueInt", value=cid),
-                            ]
-                            for cid in neighbor_ids
-                        ]
-                    )
-                ]
-            )
-
-            doc_field = Field(
-                name="DocumentChunk",
-                arguments=[where_arg],
-                fields=["chunk_id", "text"]
-            )
-            op = Operation(type="query", queries=[Query(name="Get", fields=[doc_field])])
-            gql = op.render()
-            resp = self.api_post("graphql", {"query": gql})
-            neighbor_chunks = resp.get("data", {}).get("Get", {}).get("DocumentChunk", [])
-
-        # ——— Combiniamo risultati originali + vicini
-        all_chunks = hits + neighbor_chunks
-
-        # ——— Ordiniamo per chunk_id
-        sorted_chunks = sorted(all_chunks, key=lambda x: x["chunk_id"])
-
-        # ——— Restituiamo testo concatenato
-        return "\n\n---\n\n".join(c["text"] for c in sorted_chunks)
 
     def ask(self,
             question: str,
@@ -486,14 +320,14 @@ class WeaviateClient:
         ask_arg = Argument(name="ask", value=args)
         limit_arg = Argument(name="limit", value=limit)
 
-        ask_field = Field(
+        ask_field = GField(
             name="DocumentChunk",
             arguments=[ask_arg, limit_arg],
             fields=[
-                Field(
+                GField(
                     name="_additional",
                     fields=[
-                        Field(name="answer", fields=[
+                        GField(name="answer", fields=[
                             "hasAnswer", "result", "certainty", "startPosition", "endPosition"
                         ])
                     ]
@@ -546,7 +380,7 @@ class WeaviateClient:
                 value=[Argument(name="prompt", value=prompt)]
             )
         ]
-        generate_field = Field(
+        generate_field = Gield(
             name="generate",
             arguments=generate_args,
             fields=["singleResult", "error"]
@@ -556,9 +390,9 @@ class WeaviateClient:
             name="DocumentChunk",
             arguments=[filter_arg, limit_arg],
             fields=[
-                Field(name="chunk_id"),
-                Field(name="text"),
-                Field(name="_additional", fields=[generate_field])
+                Gield(name="chunk_id"),
+                Gield(name="text"),
+                Gield(name="_additional", fields=[generate_field])
             ]
         )
 
