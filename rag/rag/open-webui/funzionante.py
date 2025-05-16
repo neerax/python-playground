@@ -18,7 +18,7 @@ class Tools:
             "https://my-weaviate.com",
             description="URL base del server Weaviate, es. https://my-weaviate.com",
         )
-        WEAVIATE_API_KEY: SecretStr = Field(
+        WEAVIATE_API_KEY: str = Field(
             SecretStr(""),
             description="API key per l'autenticazione su Weaviate (facoltativa)",
         )
