@@ -186,7 +186,7 @@ class WeaviateClient:
         )
         return argument
 
-    def super_search(self, class_name: str, variables: Dict, properties: List = [], additional : List = []):
+    def super_search(self, class_name: str, variables: Dict, properties: List = [], additional : List = [], neighbors = 0, neighbors_index_name="chunk_id", key_property_name="source"):
 
         TYPE_MAP = {
             "where": "GetObjects"+class_name+"WhereInpObj!",
@@ -240,11 +240,58 @@ class WeaviateClient:
             "variables": variables
         })
 
-        #print(resp)
+        objects=resp['data']['Get'][class_name]
 
-        #print (resp['errors'])
+        # ——— Se voglio i N vicini…
+        if neighbors > 0 and objects:
+            # 1) costruisco (chunk_id, source) dei vicini
+            neighbor_pairs = set()
+            for o in objects:
+                cid = o[neighbors_index_name]
+                src = o[key_property_name]
+                for delta in range(1, neighbors+1):
+                    if cid - delta >= 0:
+                        neighbor_pairs.add((cid - delta, src))
+                    neighbor_pairs.add((cid + delta, src))
 
-        return resp['data']['Get'][class_name]
+            # 2) filtro GraphQL OR-of-ANDs
+            where_filter = {
+                "operator": "Or",
+                "operands": [
+                    {
+                        "operator": "And",
+                        "operands": [
+                            {"path": [neighbors_index_name],
+                             "operator": "Equal",
+                             "valueInt": neigh_cid},
+                            {"path": [key_property_name],
+                             "operator": "Equal",
+                             "valueString": neigh_src}
+                        ]
+                    }
+                    for neigh_cid, neigh_src in neighbor_pairs
+                ]
+            }
+
+            # 3) richiamo super_search per i soli neighbor, disabilitando la ricorsione
+            neighbor_objs = self.super_search(
+                class_name,
+                variables={
+                    "where": where_filter,
+                    #"limit": len(neighbor_pairs),
+                },
+                properties=properties,
+                additional=additional,
+                neighbors=0,
+                neighbors_index_name=neighbors_index_name,
+                key_property_name=key_property_name
+            )
+
+            # 4) unisco e ordino
+            objects.extend(neighbor_objs)
+
+        # 5) ordino tutto per chunk_id e restituisco
+        return sorted(objects, key=lambda x: x[neighbors_index_name])
                 
     def get_document_chunk(self, source: str):
         op = Operation(
@@ -341,11 +388,17 @@ class WeaviateClient:
 
         return op.render()
 
-    def nearText(self, class_name: str, text: str, properties : list[str], additional: list[str], k: int = 1, neighbors: int = 1):
+    def nearText(self, class_name: str, text: str, properties : list[str], additional: list[str], k: int = 1, neighbors: int = 1, neighbors_property_name: str = "chunk_id", same_property_name: str = "source"):
 
         for a in ['certainty', 'distance', 'score']:
             if not a in additional:
                 additional.append(a)
+
+        if (neighbors > 0):
+            if not neighbors_property_name in properties:
+                properties.append(neighbors_property_name)
+            if not "id" in additional:
+                additional.append("id")
 
         objects = self.super_search(
             class_name,
@@ -356,33 +409,21 @@ class WeaviateClient:
                 "limit": k
             },
             properties=properties,
-            additional=additional
+            additional=additional,
+            neighbors=neighbors,
+            neighbors_index_name=neighbors_property_name,
+            key_property_name=same_property_name
         )
 
+        
         return objects
-        # ——— Prima query: nearText / nearVector
-        initial_gql = self.create_query_with_neighbors(text, k, neighbors)
-        initial_resp = self.api_post("graphql", {"query": initial_gql})
-        hits = initial_resp.get("data", {}).get("Get", {}).get("DocumentChunk", [])
-        if not hits:
-            return ""
-
-        # Debug 1: chunk_id principali trovati
-        main_ids = [h["chunk_id"] for h in hits]
-        print("[DEBUG] Chunk IDs trovati:", main_ids)
+        
 
         # ——— Calcolo IDs estesi (inclusi vicini)
-        extended_ids = {
-            n
-            for cid in main_ids
-            for n in range(cid - neighbors, cid + neighbors + 1)
-            if n >= 0
-        }
-        print("[DEBUG] Chunk IDs estesi:", sorted(extended_ids))
+        
 
         # ——— Filtra solo i vicini che non erano in main_ids
-        neighbor_ids = sorted(extended_ids.difference(main_ids))
-        print("[DEBUG] Chunk IDs da recuperare (solo vicini):", neighbor_ids)
+        
 
         neighbor_chunks = []
         if neighbor_ids:

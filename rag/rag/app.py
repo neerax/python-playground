@@ -20,7 +20,6 @@ def split_text_with_langchain(text: str, chunk_size: int = 1000, chunk_overlap: 
     splitter = get_splitter(chunk_size, chunk_overlap)
     return splitter.split_text(text)
 
-
 def file_func_call(
     path: str,
     func: Callable[[str, int, str], None],
@@ -64,7 +63,6 @@ def put_tika(path_to_file: str) -> str:
     
     except Exception as e:
         raise
-
 
 class RagApp:
     def __init__(self, url, weaviate_api_key):
@@ -115,7 +113,6 @@ class RagApp:
 
 
     def get_id_from_object(self, object):
-        print("OBJECT****************", object)
         return object["_additional"]["id"]
 
 
@@ -141,7 +138,6 @@ class RagApp:
                     "valueString": source
             }
         )
-
 
     def delete_documents_by_source(self, source: str):
         self.delete_objects_by_source("Document", source)
@@ -175,7 +171,8 @@ class RagApp:
                 self.delete_chunks_by_source(file_path)
                 self.pipeline(file_path, size, m_time)
             else:
-                print("skipping", file_path)
+                pass
+                #print("skipping", file_path)
 
     def ingest_path(self, path: str, recursive: bool = False):
         return file_func_call(path, self.ingest_file, recursive)

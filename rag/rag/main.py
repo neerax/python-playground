@@ -189,7 +189,7 @@ def chunks_near_text(
 ):
     w = ctx.obj.app.chunks_near_text(text, k, neighbors)
     print(len(w))
-    print(w)
+    #print(json.dumps(w))
     
         
 
