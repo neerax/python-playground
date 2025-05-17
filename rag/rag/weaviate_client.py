@@ -1,10 +1,7 @@
 import requests
 
-from dotenv import load_dotenv
 from graphql_query import Operation, Query, Field as GField, Argument, Variable
-from langchain.schema import Document
 from typing import List, Dict
-from langchain.schema.retriever import BaseRetriever
 from requests.exceptions import HTTPError
 from urllib.parse import urlencode
 
@@ -404,12 +401,3 @@ class WeaviateClient:
         resp = self.api_post("graphql", {"query": gql})
         return resp.get("data", {}).get("Get", {}).get("DocumentChunk", [])
 
-class WeaviateRetriever(BaseRetriever):
-    client: WeaviateClient
-    k: int = 3
-    neighbors: int = 1
-
-    def _get_relevant_documents(self, query: str) -> List[Document]:
-        raw = self.client.query(query, self.k, self.neighbors)
-        parts = [p for p in raw.split("\n\n---\n\n") if p.strip()]
-        return [Document(page_content=p) for p in parts]
