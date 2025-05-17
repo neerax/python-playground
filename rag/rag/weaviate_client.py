@@ -102,7 +102,7 @@ class WeaviateClient:
         return self.api_post("objects", payload)    
 
     def get_objects(self, class_name: str, fields = []):
-        fields.append(Field(name="_additional", fields=["id"]))
+        fields.append(GField(name="_additional", fields=["id"]))
         op = Operation(
             type="query",
             queries=[
@@ -177,6 +177,13 @@ class WeaviateClient:
             "query": q,
             "variables": variables
         })
+
+        
+
+        if "errors" in resp:
+            raise(ValueError(resp))
+
+        
 
         objects=resp['data']['Get'][class_name]
 
@@ -383,13 +390,13 @@ class WeaviateClient:
             fields=["singleResult", "error"]
         )
 
-        rag_field = Field(
+        rag_field = GField(
             name="DocumentChunk",
             arguments=[filter_arg, limit_arg],
             fields=[
-                Gield(name="chunk_id"),
-                Gield(name="text"),
-                Gield(name="_additional", fields=[generate_field])
+                GField(name="chunk_id"),
+                GField(name="text"),
+                GField(name="_additional", fields=[generate_field])
             ]
         )
 

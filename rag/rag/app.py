@@ -1,7 +1,7 @@
 import os
 from typing import Callable
-from weaviate_client import WeaviateClient
-from auth import get_oauth_session
+from .weaviate_client import WeaviateClient
+from .auth import get_oauth_session
 from datetime import datetime, timezone
 from dateutil import parser
 from functools import lru_cache
@@ -207,7 +207,7 @@ class RagApp:
             properties=[
                 "source",
                 "m_time",
-                #"text"
+                "text"
             ],
             additional=[
                 "id",
