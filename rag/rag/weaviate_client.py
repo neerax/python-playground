@@ -171,7 +171,7 @@ class WeaviateClient:
 
         q = operation.render()
 
-        print("QUERY",q, variables)
+        #print("QUERY",q, variables)
 
         resp = self.api_post("graphql", {
             "query": q,

@@ -4,6 +4,8 @@ from dotenv import load_dotenv
 import os
 
 
+st.set_page_config(layout="wide")
+
 @st.cache_resource()
 def get_app():
     load_dotenv(dotenv_path="../../rag/rag/.env")
@@ -16,7 +18,7 @@ objects = app.get_documents()
 
 objects = [o["source"] for o in objects]
 
-st.set_page_config(layout="wide")
+
 
 for o in objects:
     st.text(o)

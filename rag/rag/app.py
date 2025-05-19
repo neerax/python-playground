@@ -1,12 +1,12 @@
 import os
 from typing import Callable
-from .weaviate_client import WeaviateClient
-from .auth import get_oauth_session
+from rag.weaviate_client import WeaviateClient
+from rag.auth import get_oauth_session
 from datetime import datetime, timezone
 from dateutil import parser
 from functools import lru_cache
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-
+from hashlib import sha256
 
 @lru_cache(maxsize=1)
 def get_splitter(chunk_size=500, chunk_overlap=100):
@@ -83,7 +83,7 @@ class RagApp:
                     "valueString" : file_path
                 }
             },
-            properties=["size", "source","m_time", "vectorized"],
+            properties=["size", "source","m_time", "vectorized","hash"],
             additional=["id"]
         )
         result_length = len (result)
@@ -145,31 +145,63 @@ class RagApp:
     def delete_chunks_by_source(self, source: str):
         self.delete_objects_by_source("DocumentChunk", source)
         
-    def pipeline(self, file_path, size, m_time):
+    def pipeline(self, file_path, size, m_time, hash):
         extracted_text = put_tika(file_path)
-        result = self.weaviate_client.ingest("Document", text=extracted_text, source=file_path, size=size, m_time = m_time.isoformat(), vectorized=False)
+        result = self.weaviate_client.ingest("Document", text=extracted_text, source=file_path, size=size, m_time = m_time.isoformat(), vectorized=False, hash=hash)
         id = result["id"]
         self.ingest_chunks(extracted_text, file_path)
         self.weaviate_client.patch_object("Document", id, {"properties": {"vectorized": True}})
 
+
+    def get_hash(self, file_path):
+        h = sha256()
+        with open(file_path, 'rb') as f:
+            for chunk in iter(lambda: f.read(32768), b''):
+                h.update(chunk)
+
+        return h.hexdigest()
+
+    def is_duplicated_by_hash(self, file_path):
+        
+        hash = self.get_hash(file_path)
+
+        # search hash in weaviate
+        result = self.weaviate_client.super_search(
+            "Document",
+            { "where": 
+                {
+                    "operator": "Equal",
+                    "path" : ["hash"],
+                    "valueString" : hash
+                }
+            },
+            properties=["hash","source"]
+        )
+
+        return result, hash
+
     def ingest_file(self, file_path, size, m_time):
-        print("processing file", file_path, size, m_time)
+        print("processing file:", file_path)
         
         doc = self.get_document_by_file_path(file_path)
         
         if doc is None:
             self.delete_chunks_by_source(file_path) # per sicurezza, potremmo aver cancellato il documento padre e ci potrebbero essere chunks orfani
-            self.pipeline(file_path, size, m_time)
-            #self.weaviate_client.delete_chunks_by_source(file_path)            
+            hash_duplicates, hash = self.is_duplicated_by_hash(file_path)
+            if hash_duplicates:
+                print("skipping, is hash a duplicate of:", hash_duplicates)
+            else:
+                self.pipeline(file_path, size, m_time, hash)
+                      
         else:
-            # verifichiamo che il file non sia cambiato
-
             parsed = parser.parse(doc["m_time"])
-            if doc["size"] != size or parsed != m_time or not doc["vectorized"]:
-                print("*** Document modified, reingesting", file_path)
+            hash = self.get_hash(file_path)
+
+            if doc["size"] != size or parsed != m_time or not doc["vectorized"] or doc["hash"] != hash:
+                print("*** Document modified or not properly vectorized reingesting", file_path)
                 self.delete_documents_by_source(file_path)
                 self.delete_chunks_by_source(file_path)
-                self.pipeline(file_path, size, m_time)
+                self.pipeline(file_path, size, m_time, hash)
             else:
                 pass
                 #print("skipping", file_path)
@@ -180,6 +212,9 @@ class RagApp:
     def get_documents(self):
         return self.weaviate_client.get_objects("Document",["text","source","vectorized"])['data']['Get']['Document']
     
+    def get_chunks(self):
+        return self.weaviate_client.get_objects("DocumentChunk",["text","source","chunk_id"])['data']['Get']['DocumentChunk']
+
     def bm25(self, class_name, text):
         return self.weaviate_client.super_search(
             class_name,
