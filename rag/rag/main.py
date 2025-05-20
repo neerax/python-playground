@@ -1,5 +1,3 @@
-import requests
-import os
 from dotenv import load_dotenv
 
 from auth import get_oauth_session
@@ -19,7 +17,7 @@ from typing_extensions import Annotated
 from typer import Typer, Context, Option, Argument, echo, secho, colors
 
 from chatbot import run_chat
-from app import RagApp
+from app import RagApp, put_tika
 
 load_dotenv()
 
@@ -97,7 +95,13 @@ def show_documents(ctx: Context):
         secho(document["_additional"]["id"])
         secho(document["source"])
         secho(document["vectorized"])
-#        print(document)
+
+@app.command()
+def show_chunks(ctx: Context):
+    chunks = ctx.obj.app.get_chunks()
+    for chunk in chunks:
+        secho(chunk["_additional"]["id"])
+        secho(chunk["source"])
 
 @app.command()
 def delete_chunks_by_source(ctx: Context, source: str):
@@ -190,11 +194,13 @@ def chunks_near_text(
     w = ctx.obj.app.chunks_near_text(text, k, neighbors)
     print(len(w))
     #print(json.dumps(w))
-    
-        
-
-##    print(w)
-
+   
+@app.command()
+def tika(
+    file_path: str
+):
+    extracted_text = put_tika(file_path)
+    secho(extracted_text)
 
 @app.command()
 def test(

@@ -1,7 +1,9 @@
 from langchain_groq.chat_models import ChatGroq
 from langchain.chains import ConversationalRetrievalChain
 from langchain.memory import ConversationBufferMemory
-from weaviate_client import WeaviateClient, WeaviateRetriever
+from weaviate_client import WeaviateClient
+from weaviate_retriever import WeaviateRetriever
+
 
 def run_chat(
     client: WeaviateClient,
